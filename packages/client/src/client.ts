@@ -5816,6 +5816,7 @@ function prepareResponseData<U>(obj: any, orSchema?: any): U {
     } else if (schema) {
         if (schema.type === 'string') {
             if (schema.format === 'address') {
+                if (!Boolean(obj)) return obj;
                 return Address.parse(obj as string) as U;
             }
 
