@@ -329,7 +329,8 @@ export enum AccStatusChange {
 export enum ComputeSkipReason {
     CskipNoState = 'cskip_no_state',
     CskipBadState = 'cskip_bad_state',
-    CskipNoGas = 'cskip_no_gas'
+    CskipNoGas = 'cskip_no_gas',
+    CskipSuspended = 'cskip_suspended'
 }
 
 /** @example "cskip_no_state" */
@@ -1426,7 +1427,7 @@ export interface JettonPreview {
     verification: JettonVerificationType;
     customPayloadApiUri?: string;
     /** @format int32 */
-    score?: number;
+    score: number;
 }
 
 export interface JettonBalance {
@@ -1701,6 +1702,10 @@ export interface TonTransferAction {
     comment?: string;
     encryptedComment?: EncryptedComment;
     refund?: Refund;
+}
+
+export interface ExtraCurrencies {
+    extraCurrencies: EcPreview[];
 }
 
 export interface EcPreview {
@@ -2472,8 +2477,6 @@ export interface JettonInfo {
      * @example 2000
      */
     holdersCount: number;
-    /** @format int32 */
-    score?: number;
 }
 
 export interface JettonHolders {
@@ -2659,6 +2662,7 @@ export interface FoundAccounts {
         name: string;
         /** @example "https://cache.tonapi.io/images/media.jpg" */
         preview: string;
+        trust: TrustType;
     }[];
 }
 
@@ -2675,7 +2679,7 @@ export interface DnsExpiring {
     }[];
 }
 
-/** @example [[1668436763,97.21323234]] */
+/** @example [1668436763,97.21323234] */
 export type ChartPoints = [number, number];
 
 export interface AccountInfoByStateInit {
@@ -2734,6 +2738,7 @@ export interface EncryptedComment {
 export interface BlockchainAccountInspect {
     /** @format cell */
     code: Cell;
+    disassembledCode?: string;
     codeHash: string;
     methods: Method[];
     compiler: 'func' | 'fift' | 'tact';
@@ -2910,6 +2915,8 @@ export interface GetAccountDiffData {
     balanceChange: number;
 }
 
+export type GetAccountExtraCurrencyHistoryByIdData = AccountEvents;
+
 export type GetDnsInfoData = DomainInfo;
 
 export type DnsResolveData = DnsRecord;
@@ -2960,6 +2967,8 @@ export type GetJettonHoldersData = JettonHolders;
 export type GetJettonTransferPayloadData = JettonTransferPayload;
 
 export type GetJettonsEventsData = Event;
+
+export type GetExtraCurrencyInfoData = EcPreview;
 
 export type GetAccountNominatorsPoolsData = AccountStaking;
 
@@ -3778,7 +3787,7 @@ const components = {
     },
     '#/components/schemas/ComputeSkipReason': {
         type: 'string',
-        enum: ['cskip_no_state', 'cskip_bad_state', 'cskip_no_gas']
+        enum: ['cskip_no_state', 'cskip_bad_state', 'cskip_no_gas', 'cskip_suspended']
     },
     '#/components/schemas/BouncePhaseType': {
         type: 'string',
@@ -4641,7 +4650,7 @@ const components = {
     },
     '#/components/schemas/JettonPreview': {
         type: 'object',
-        required: ['address', 'name', 'symbol', 'decimals', 'verification', 'image'],
+        required: ['address', 'name', 'symbol', 'decimals', 'verification', 'image', 'score'],
         properties: {
             address: { type: 'string', format: 'address' },
             name: { type: 'string' },
@@ -4895,6 +4904,13 @@ const components = {
             comment: { type: 'string' },
             encrypted_comment: { $ref: '#/components/schemas/EncryptedComment' },
             refund: { $ref: '#/components/schemas/Refund' }
+        }
+    },
+    '#/components/schemas/ExtraCurrencies': {
+        type: 'object',
+        required: ['extra_currencies'],
+        properties: {
+            extra_currencies: { type: 'array', items: { $ref: '#/components/schemas/EcPreview' } }
         }
     },
     '#/components/schemas/EcPreview': {
@@ -5496,8 +5512,7 @@ const components = {
             metadata: { $ref: '#/components/schemas/JettonMetadata' },
             preview: { type: 'string' },
             verification: { $ref: '#/components/schemas/JettonVerificationType' },
-            holders_count: { type: 'integer', format: 'int32' },
-            score: { type: 'integer', format: 'int32' }
+            holders_count: { type: 'integer', format: 'int32' }
         }
     },
     '#/components/schemas/JettonHolders': {
@@ -5614,11 +5629,12 @@ const components = {
                 type: 'array',
                 items: {
                     type: 'object',
-                    required: ['address', 'name', 'preview'],
+                    required: ['address', 'name', 'preview', 'trust'],
                     properties: {
                         address: { type: 'string', format: 'address' },
                         name: { type: 'string' },
-                        preview: { type: 'string' }
+                        preview: { type: 'string' },
+                        trust: { $ref: '#/components/schemas/TrustType' }
                     }
                 }
             }
@@ -5644,12 +5660,8 @@ const components = {
     },
     '#/components/schemas/ChartPoints': {
         type: 'array',
-        prefixItems: [
-            { type: 'integer', format: 'int64', description: 'Unix timestamp of the data point' },
-            { type: 'number', description: 'Decimal price of the token in the requested currency' }
-        ],
         additionalItems: false,
-        items: false
+        items: { '0': { type: 'integer', format: 'int64' }, '1': { type: 'number' } }
     },
     '#/components/schemas/AccountInfoByStateInit': {
         type: 'object',
@@ -5694,6 +5706,7 @@ const components = {
         required: ['code', 'code_hash', 'methods', 'compiler'],
         properties: {
             code: { type: 'string', format: 'cell' },
+            disassembled_code: { type: 'string' },
             code_hash: { type: 'string' },
             methods: { type: 'array', items: { $ref: '#/components/schemas/Method' } },
             compiler: { type: 'string', enum: ['func', 'fift', 'tact'] },
@@ -5816,7 +5829,6 @@ function prepareResponseData<U>(obj: any, orSchema?: any): U {
     } else if (schema) {
         if (schema.type === 'string') {
             if (schema.format === 'address') {
-                if (!Boolean(obj)) return obj;
                 return Address.parse(obj as string) as U;
             }
 
@@ -6436,7 +6448,7 @@ export class TonApiClient {
             data: {
                 /** @format cell */
                 boc?: Cell;
-                /** @maxItems 10 */
+                /** @maxItems 5 */
                 batch?: Cell[];
                 meta?: Record<string, string>;
             },
@@ -6451,7 +6463,7 @@ export class TonApiClient {
                         boc: { type: 'string', format: 'cell' },
                         batch: {
                             type: 'array',
-                            maxItems: 10,
+                            maxItems: 5,
                             items: { type: 'string', format: 'cell' }
                         },
                         meta: { type: 'object', additionalProperties: { type: 'string' } }
@@ -7169,6 +7181,58 @@ export class TonApiClient {
                 type: 'object',
                 required: ['balance_change'],
                 properties: { balance_change: { type: 'integer', format: 'int64' } }
+            });
+        },
+
+        /**
+         * @description Get the transfer history of extra currencies for an account.
+         *
+         * @tags Accounts
+         * @name GetAccountExtraCurrencyHistoryById
+         * @request GET:/v2/accounts/{account_id}/extra-currency/{id}/history
+         */
+        getAccountExtraCurrencyHistoryById: (
+            accountId_Address: Address,
+            id: number,
+            query: {
+                /**
+                 * omit this parameter to get last events
+                 * @format bigint
+                 * @example 25758317000002
+                 */
+                before_lt?: bigint;
+                /**
+                 * @min 1
+                 * @max 1000
+                 * @example 100
+                 */
+                limit: number;
+                /**
+                 * @format int64
+                 * @max 2114380800
+                 * @example 1668436763
+                 */
+                start_date?: number;
+                /**
+                 * @format int64
+                 * @max 2114380800
+                 * @example 1668436763
+                 */
+                end_date?: number;
+            },
+            params: RequestParams = {}
+        ) => {
+            const accountId = accountId_Address.toRawString();
+            const req = this.http.request<GetAccountExtraCurrencyHistoryByIdData, Error>({
+                path: `/v2/accounts/${accountId}/extra-currency/${id}/history`,
+                method: 'GET',
+                query: query,
+                format: 'json',
+                ...params
+            });
+
+            return prepareResponse<GetAccountExtraCurrencyHistoryByIdData>(req, {
+                $ref: '#/components/schemas/AccountEvents'
             });
         },
 
@@ -7959,6 +8023,27 @@ export class TonApiClient {
 
             return prepareResponse<GetJettonsEventsData>(req, {
                 $ref: '#/components/schemas/Event'
+            });
+        }
+    };
+    extraCurrency = {
+        /**
+         * @description Get extra currency info by id
+         *
+         * @tags ExtraCurrency
+         * @name GetExtraCurrencyInfo
+         * @request GET:/v2/extra-currency/{id}
+         */
+        getExtraCurrencyInfo: (id: number, params: RequestParams = {}) => {
+            const req = this.http.request<GetExtraCurrencyInfoData, Error>({
+                path: `/v2/extra-currency/${id}`,
+                method: 'GET',
+                format: 'json',
+                ...params
+            });
+
+            return prepareResponse<GetExtraCurrencyInfoData>(req, {
+                $ref: '#/components/schemas/EcPreview'
             });
         }
     };
